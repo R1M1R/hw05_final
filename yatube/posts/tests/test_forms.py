@@ -6,7 +6,7 @@ from django.conf import settings
 from django.contrib.auth import REDIRECT_FIELD_NAME, get_user_model
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
-from posts.models import Group, Post
+from posts.models import Comment, Group, Post
 
 User = get_user_model()
 
@@ -221,3 +221,48 @@ class PostFormTests(TestCase):
         self.assertNotEqual(Post.objects.count(),
                             posts_count + 1,
                             error_name2)
+
+    def test_create_comment_auth(self):
+        """Валидная форма создает комментарий."""
+        post_new = Post.objects.create(
+            author=PostFormTests.user,
+            text="Текст",
+        )
+        comments_count = Comment.objects.count()
+        form_data = {
+            "text": "Тестовый комментарий",
+        }
+        response = self.auth_client.post(
+            reverse("posts:add_comment", kwargs={"post_id": post_new.pk}),
+            data=form_data,
+            follow=True,
+        )
+        self.assertRedirects(
+            response, reverse("posts:post_detail",
+                              kwargs={"post_id": post_new.pk})
+        )
+        self.assertEqual(Comment.objects.count(), comments_count + 1)
+        last_comment = Comment.objects.order_by("-pk")[0]
+        self.assertEqual(last_comment.text, form_data["text"])
+        response = self.auth_client.get(
+            reverse("posts:post_detail", kwargs={"post_id": post_new.pk}),
+        )
+        self.assertEqual(response.context["comments"][0].text,
+                         form_data["text"])
+
+    def test_create_comment_guest(self):
+        """Валидная форма не создает комментарий от гостя."""
+        post_new = Post.objects.create(
+            author=PostFormTests.user,
+            text="Текст",
+        )
+        comments_count = Comment.objects.count()
+        form_data = {
+            "text": "Тестовый комментарий",
+        }
+        self.client.post(
+            reverse("posts:add_comment", kwargs={"post_id": post_new.pk}),
+            data=form_data,
+            follow=True,
+        )
+        self.assertEqual(Comment.objects.count(), comments_count)

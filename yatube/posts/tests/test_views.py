@@ -1,15 +1,17 @@
 import shutil
 import tempfile
+from http import HTTPStatus
 
 from django import forms
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
 from ..forms import PostForm
-from ..models import Group, Post
+from ..models import Follow, Group, Post
 
 TEMP_MEDIA_ROOT = tempfile.mkdtemp(dir=settings.BASE_DIR)
 
@@ -22,6 +24,7 @@ class PostViewsTests(TestCase):
     def setUpClass(cls):
         super().setUpClass()
         cls.user = User.objects.create(username='Author')
+        cls.user_two = User.objects.create_user(username="TestUser2")
         cls.guest_client = Client()
         cls.user_no_author = User.objects.create_user(username='NoAuthor')
         cls.group = Group.objects.create(
@@ -29,10 +32,24 @@ class PostViewsTests(TestCase):
             slug='test-slug',
             description='Тестовое описание',
         )
+        cls.bytes_image = (
+            b'\x47\x49\x46\x38\x39\x61\x02\x00'
+            b'\x01\x00\x80\x00\x00\x00\x00\x00'
+            b'\xFF\xFF\xFF\x21\xF9\x04\x00\x00'
+            b'\x00\x00\x00\x2C\x00\x00\x00\x00'
+            b'\x02\x00\x01\x00\x00\x02\x02\x0C'
+            b'\x0A\x00\x3B'
+        )
+        cls.image = SimpleUploadedFile(
+            name='small.gif',
+            content=cls.bytes_image,
+            content_type='image/gif'
+        )
         cls.post = Post.objects.create(
             author=cls.user,
             text='Тестовая запись',
             group=cls.group,
+            image=cls.image
         )
         cls.post_qty = Post.objects.count()
         cls.urls = (
@@ -94,11 +111,13 @@ class PostViewsTests(TestCase):
         self.assertEqual(post.pub_date, self.post.pub_date)
         self.assertEqual(post.author, self.user)
         self.assertEqual(post.group, self.group)
+        self.assertEqual(post.image, f'posts/{self.image}')
 
     def test_index_page_show_correct_context(self):
         """Шаблон index сформирован с правильным контекстом."""
         response = self.authorized_client.get(reverse('posts:index'))
         self.check_context(response)
+        self.assertContains(response, '<img', count=2)
 
     def test_profile_page_show_correct_context(self):
         """Шаблон profile сформирован с правильным контекстом."""
@@ -107,6 +126,7 @@ class PostViewsTests(TestCase):
         )
         self.check_context(response)
         self.assertEqual(response.context.get('author'), self.user)
+        self.assertContains(response, '<img', count=2)
 
     def test_group_list_page_show_correct_context(self):
         """Шаблон group_list сформирован с правильным контекстом."""
@@ -115,6 +135,7 @@ class PostViewsTests(TestCase):
         )
         self.check_context(response)
         self.assertEqual(response.context.get('group'), self.group)
+        self.assertContains(response, '<img', count=1)
 
     def test_post_detail_page_show_correct_context(self):
         """Шаблон post_detail сформирован с правильным контекстом."""
@@ -123,6 +144,7 @@ class PostViewsTests(TestCase):
             reverse('posts:post_detail', args=(self.post.id,))
         )
         self.check_context(response, True)
+        self.assertContains(response, '<img', count=2)
 
     def test_create_edit_page_show_correct_form(self):
         """post_create и post_edit сформированы с правильным контекстом."""
@@ -199,3 +221,60 @@ class PostViewsTests(TestCase):
                 response = self.authorized_client.get(value)
                 form_field = response.context["page_obj"]
                 self.assertNotIn(expected, form_field)
+
+    def test_cache(self):
+        """Проверка работы кэша."""
+        post = Post.objects.create(
+            author=self.user,
+            text='Пост для проверки кэша',
+            group=self.group
+        )
+        response_1 = self.client.get(reverse('posts:index'))
+        self.assertTrue(Post.objects.get(pk=post.id))
+        Post.objects.get(pk=post.id).delete()
+        cache.clear()
+        response_3 = self.client.get(reverse('posts:index'))
+        self.assertNotEqual(response_1.content, response_3.content)
+
+    def test_users_can_follow_and_unfollow(self):
+        """Зарегистрированный пользователь может подписаться и отписаться."""
+        follower_qty = Follow.objects.count()
+        response = self.authorized_client_no_author.get(
+            reverse('posts:profile_follow', args=(self.user,))
+        )
+        self.assertRedirects(
+            response, reverse('posts:profile', args=(self.user,)),
+            HTTPStatus.FOUND
+        )
+        self.assertEqual(Follow.objects.count(), follower_qty + 1)
+        response = self.authorized_client_no_author.get(
+            reverse('posts:profile_unfollow', args=(self.user,))
+        )
+        self.assertRedirects(
+            response, reverse('posts:profile', args=(self.user,)),
+            HTTPStatus.FOUND
+        )
+        self.assertEqual(Follow.objects.count(), follower_qty)
+
+    def test_follow_index_page_(self):
+        """Новая запись пользователя появляется в ленте followers
+        и не появляется в ленте остальных.
+        """
+        new_user = User.objects.create_user(username="TestFollow")
+        new_client = Client()
+        new_client.force_login(new_user)
+        new_client.post(
+            reverse(
+                "posts:profile_follow",
+                kwargs={"username": str(PostViewsTests.user_two)},
+            )
+        )
+        new_post = Post.objects.create(
+            author=PostViewsTests.user_two,
+            text="Текст для теста follow.",
+        )
+        response = self.authorized_client.get(reverse("posts:follow_index"))
+        response_new_user = new_client.get(reverse("posts:follow_index"))
+        self.assertIn(new_post,
+                      response_new_user.context["page_obj"].object_list)
+        self.assertNotIn(new_post, response.context["page_obj"].object_list)

@@ -24,7 +24,7 @@ SECRET_KEY = "hf3g0^###z_4a&t2hfd!hiioksx4p&sbvfo)#)9nut8(wgf!=&"
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
-CSRF_FAILURE_VIEW = 'core.views.csrf_failure'
+
 ALLOWED_HOSTS = [
     'localhost',
     '127.0.0.1',
@@ -159,9 +159,17 @@ LOGIN_REDIRECT_URL = "posts:index"
 # LOGOUT_REDIRECT_URL = 'posts:index'
 LIMIT_POSTS: int = 10
 CUT_TEXT: int = 15
+
 # Подключите к проекту модуль filebased.EmailBackend:
 # он будет сохранять текст отправленных электронных писем в файлы в отдельную директорию
 # подключаем движок filebased.EmailBackend
 EMAIL_BACKEND = "django.core.mail.backends.filebased.EmailBackend"
 # указываем директорию, в которую будут складываться файлы писем
 EMAIL_FILE_PATH = os.path.join(BASE_DIR, "sent_emails")
+PER_PAGE_COUNT = 10
+CSRF_FAILURE_VIEW = 'core.views.csrf_failure'
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+    }
+}

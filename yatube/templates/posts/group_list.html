@@ -4,18 +4,10 @@
   <div class="container py-5">
     <h1>{{ group.title }}</h1>
     <p>{{ group.description }}</p>
-    <article>
-      {% for post in page_obj %}
-        {% include 'posts/includes/card.html' %}
-        <a href="{% url 'posts:post_detail' post.pk %}">подробная информация</a>
-        <br>
-        <a href="{% url 'posts:group_list' post.group.slug %}">все записи группы</a>
-        {% if not forloop.last %}
-          <hr>
-        {% endif %}
-        {% empty %}
-      {% endfor %}
-      {% include 'posts/includes/paginator.html' %}
-    </article>
+    {% for post in posts %}
+      {% include 'posts/includes/post_list.html' with display_group_link=False %}
+      {% if not forloop.last %}<hr>{% endif %} 
+    {% endfor %}
+    {% include 'posts/includes/paginator.html' %}
   </div>
 {% endblock %}

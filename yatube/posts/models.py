@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.db import models
+from posts.validators import validate_not_empty
 
 User = get_user_model()
 
@@ -22,7 +23,11 @@ class Group(models.Model):
 
 class Post(models.Model):
     text = models.TextField('Текст записи', help_text='Текст вашей записи')
-    pub_date = models.DateTimeField('Дата публикации', auto_now_add=True)
+    pub_date = models.DateTimeField(
+        'Дата публикации',
+        auto_now_add=True,
+        db_index=True
+    )
     author = models.ForeignKey(
         User,
         blank=True,
@@ -53,3 +58,40 @@ class Post(models.Model):
 
     def __str__(self):
         return self.text[:15]
+
+
+class Comment(models.Model):
+    post = models.ForeignKey(
+        Post,
+        related_name="comments",
+        on_delete=models.SET_NULL,
+        null=True,
+        help_text="",
+    )
+    author = models.ForeignKey(
+        User, related_name="comments",
+        on_delete=models.CASCADE, null=True
+    )
+    text = models.TextField(
+        validators=[validate_not_empty],
+        verbose_name="Текст комментария", help_text=""
+    )
+    created = models.DateTimeField(auto_now_add=True)
+
+
+class Follow(models.Model):
+    user = models.ForeignKey(
+        User,
+        related_name="follower",
+        on_delete=models.CASCADE,
+        null=True,
+    )
+    author = models.ForeignKey(
+        User, related_name="following", on_delete=models.CASCADE, null=True
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["user", "author"],
+                                    name="unique_following")
+        ]
