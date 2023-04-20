@@ -11,6 +11,7 @@ MAGIC_NUM: int = 30
 LENGTH: int = 10
 User = get_user_model()
 
+
 @cache_page(20)
 def index(request):
     posts = Post.objects.select_related('author', 'group')
