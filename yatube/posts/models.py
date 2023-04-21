@@ -4,14 +4,12 @@ from posts.validators import validate_not_empty
 
 User = get_user_model()
 
+CUT_TEXT: int = 15
 
 class Group(models.Model):
     title = models.CharField(max_length=200)
     slug = models.SlugField(unique=True)
     description = models.TextField()
-
-    def __str__(self):
-        return self.title
 
     class Meta:
         verbose_name = 'Группа'
@@ -57,7 +55,7 @@ class Post(models.Model):
         verbose_name_plural = 'Посты'
 
     def __str__(self):
-        return self.text[:15]
+        return self.text[:CUT_TEXT]
 
 
 class Comment(models.Model):
@@ -66,17 +64,31 @@ class Comment(models.Model):
         related_name="comments",
         on_delete=models.SET_NULL,
         null=True,
+        verbose_name='Cтатья с комментариями',
         help_text="",
     )
     author = models.ForeignKey(
         User, related_name="comments",
-        on_delete=models.CASCADE, null=True
+        on_delete=models.CASCADE, null=True,
+        verbose_name='Автор комментария',
     )
     text = models.TextField(
         validators=[validate_not_empty],
-        verbose_name="Текст комментария", help_text=""
+        verbose_name='Комментарий',
+        help_text='Напишите комменатрий',
     )
-    created = models.DateTimeField(auto_now_add=True)
+    created = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='Дата публикации',
+    )
+
+    class Meta:
+        ordering = ['-created']
+        verbose_name = 'комментарий'
+        verbose_name_plural = 'комментарии'
+
+    def __str__(self):
+        return self.text[:CUT_TEXT]
 
 
 class Follow(models.Model):
@@ -85,9 +97,12 @@ class Follow(models.Model):
         related_name="follower",
         on_delete=models.CASCADE,
         null=True,
+        verbose_name='Подписчик',
     )
     author = models.ForeignKey(
-        User, related_name="following", on_delete=models.CASCADE, null=True
+        User, related_name="following",
+        on_delete=models.CASCADE, null=True,
+        verbose_name='Отслеживается',
     )
 
     class Meta:
@@ -95,3 +110,5 @@ class Follow(models.Model):
             models.UniqueConstraint(fields=["user", "author"],
                                     name="unique_following")
         ]
+        verbose_name = 'Подписка'
+        verbose_name_plural = 'Подписки'

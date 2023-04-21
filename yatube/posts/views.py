@@ -91,7 +91,8 @@ def post_detail(request, post_id):
 
 @login_required
 def post_create(request):
-    form = PostForm(request.POST)
+    form = PostForm(request.POST,
+                    files=request.FILES or None,)
     if form.is_valid():
         post = form.save(commit=False)
         post.author = request.user
@@ -104,6 +105,7 @@ def post_create(request):
     return render(request, template, context)
 
 
+@login_required
 def post_edit(request, post_id):
     is_edit = True
     post = get_object_or_404(Post, pk=post_id)
@@ -145,7 +147,8 @@ def add_comment(request, post_id):
 def follow_index(request):
     follower_user = request.user
     following_authors = (
-        Follow.objects.filter(user=follower_user).values("author")
+        Follow.objects.filter(
+            author__following__user=follower_user).values("author")
     )
     posts = Post.objects.filter(author__in=following_authors)
     template = "posts/follow.html"
@@ -163,11 +166,9 @@ def follow_index(request):
 def profile_follow(request, username):
     author = get_object_or_404(User, username=username)
     following_user = request.user
-    if author != following_user:
-        if Follow.objects.get_or_create(user=following_user, author=author):
-            return redirect("posts:profile", username=username)
-    else:
-        return redirect("posts:index")
+    if following_user != author and following_user != author.follower:
+        Follow.objects.get_or_create(user=following_user, author=author)
+    return redirect('posts:profile', username)
 
 
 @login_required

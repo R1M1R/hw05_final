@@ -7,11 +7,12 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import IntegrityError
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
 from ..forms import PostForm
-from ..models import Follow, Group, Post
+from ..models import Comment, Follow, Group, Post
 
 TEMP_MEDIA_ROOT = tempfile.mkdtemp(dir=settings.BASE_DIR)
 
@@ -51,6 +52,14 @@ class PostViewsTests(TestCase):
             group=cls.group,
             image=cls.image
         )
+        cls.comment_1 = Comment.objects.create(
+            author=cls.user,
+            text='Комментарий к посту 1',
+            post_id=cls.post.id
+        )
+        cls.post_detail_url = (
+            'posts:post_detail', 'posts/post_detail.html', (cls.post.id,)
+        )
         cls.post_qty = Post.objects.count()
         cls.urls = (
             ('posts:index', None, 'posts/index.html'),
@@ -59,6 +68,9 @@ class PostViewsTests(TestCase):
             ('posts:post_detail', (cls.post.id,), 'posts/post_detail.html'),
             ('posts:post_create', None, 'posts/create_post.html'),
             ('posts:post_edit', (cls.post.id,), 'posts/create_post.html'),
+            ('posts:profile_follow', (cls.user,), None),
+            ('posts:profile_unfollow', (cls.user,), None),
+            ('posts:add_comment', (cls.post.id,), None),
         )
 
     @classmethod
@@ -93,12 +105,26 @@ class PostViewsTests(TestCase):
                 error_name = f'Ошибка: {adress} ожидал шаблон {template}'
                 self.assertTemplateUsed(response, template, error_name)
 
-    def test_pages_uses_correct_template_authorized_user(self):
-        """view-функции использует соответствующий шаблон."""
-        for url, args, template in self.urls:
-            reverse_name = reverse(url, args=args)
-            with self.subTest(reverse_name=reverse_name):
-                response = self.authorized_client.get(reverse_name)
+    def test_pages_uses_correct_template_auth_user(self):
+        """URL-адрес использует соответствующий шаблон."""
+        templates_page_names = {
+            reverse('posts:index'): 'posts/index.html',
+            reverse('posts:group_list',
+                    kwargs={'slug': self.group.slug}
+                    ): 'posts/group_list.html',
+            reverse('posts:profile',
+                    kwargs={'username': self.user}): 'posts/profile.html',
+            reverse('posts:post_detail',
+                    kwargs={
+                        'post_id': self.post.pk}): 'posts/post_detail.html',
+            reverse('posts:post_create'): 'posts/create_post.html',
+            reverse('posts:post_edit',
+                    kwargs={
+                        'post_id': self.post.pk}): 'posts/create_post.html',
+        }
+        for url, template in templates_page_names.items():
+            with self.subTest(template=template):
+                response = self.authorized_client.get(url)
                 self.assertTemplateUsed(response, template)
 
     def check_context(self, response, bool=False):
@@ -278,3 +304,64 @@ class PostViewsTests(TestCase):
         self.assertIn(new_post,
                       response_new_user.context["page_obj"].object_list)
         self.assertNotIn(new_post, response.context["page_obj"].object_list)
+
+    def test_double_follow(self):
+        """"Проверка проверка на повторную подписку"""
+        Follow.objects.create(
+            user=self.user,
+            author=self.user_two,
+        )
+        with self.assertRaises(IntegrityError):
+            Follow.objects.create(user=self.user, author=self.user_two)
+    
+    def test_no_self_follow(self):
+        """"Проверка подписки на себя"""
+        constraint_name = "prevent_self_follow"
+        with self.assertRaisesMessage(IntegrityError, constraint_name):
+            Follow.objects.create(user=self.user, author=self.user)
+
+    def test_commentary_for_add_comment(self):
+        """"Проверка отправки комментария на страницу поста"""
+        comment_post = Comment.objects.create(
+            post=self.post,
+            author=self.user,
+            text='test_comment_text'
+        )
+        response = self.authorized_client.get(
+            reverse('posts:post_detail', kwargs={'post_id': self.post.pk}))
+        context_objects = response.context['comments'][0]
+        self.assertEqual(context_objects.text, comment_post.text)
+
+    def test_add_comment(self):
+        """"Проверка добавления коменнтария пользователем"""
+        comment_count = Comment.objects.count()
+        form_data = {
+            'post': self.post,
+            'author': self.user,
+            'text': 'test_comment_text'
+        }
+        response = self.authorized_client.post(
+            reverse('posts:add_comment', kwargs={'post_id': self.post.pk}),
+            data=form_data,
+            follow=True
+        )
+        self.assertRedirects(response, reverse(
+            'posts:post_detail', kwargs={'post_id': self.post.pk}))
+        self.assertEqual(Comment.objects.count(), comment_count + 1)
+        self.assertTrue(
+            Comment.objects.filter(
+                text='test_comment_text',
+            ).exists()
+        )
+
+    def test_comments_only_for_authorized_guests(self):
+        """Создавать комментарий неавторизованный пользователь не может"""
+        form_data = {"text": "text"}
+        response = self.guest_client.post(
+            reverse("posts:add_comment", kwargs={"post_id": self.post.pk}),
+            data=form_data,
+            follow=True,
+        )
+        self.assertRedirects(
+            response, f"/auth/login/?next=/posts/{self.post.pk}/comment/"
+        )
