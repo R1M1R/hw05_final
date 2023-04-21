@@ -313,7 +313,7 @@ class PostViewsTests(TestCase):
         )
         with self.assertRaises(IntegrityError):
             Follow.objects.create(user=self.user, author=self.user_two)
-    
+
     def test_no_self_follow(self):
         """"Проверка подписки на себя"""
         constraint_name = "prevent_self_follow"
