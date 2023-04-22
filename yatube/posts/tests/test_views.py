@@ -314,6 +314,12 @@ class PostViewsTests(TestCase):
         with self.assertRaises(IntegrityError):
             Follow.objects.create(user=self.user, author=self.user_two)
 
+    def test_no_self_follow(self):
+        """"Проверка подписки на себя"""
+        constraint_name = "prevent_self_following"
+        with self.assertRaisesMessage(IntegrityError, constraint_name):
+            Follow.objects.create(user=self.user, author=self.user)
+
     def test_commentary_for_add_comment(self):
         """"Проверка отправки комментария на страницу поста"""
         comment_post = Comment.objects.create(

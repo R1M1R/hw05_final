@@ -108,8 +108,17 @@ class Follow(models.Model):
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=["user", "author"],
-                                    name="unique_following")
+            models.UniqueConstraint(
+                fields=["user", "author"],
+                name="unique_following"
+            ),
+            models.CheckConstraint(
+                check=~models.Q(user=models.F("author")),
+                name="prevent_self_following",
+            ),
         ]
         verbose_name = 'Подписка'
         verbose_name_plural = 'Подписки'
+
+    def __str__(self):
+        return self.author
