@@ -1,4 +1,3 @@
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
@@ -152,7 +151,7 @@ def follow_index(request):
     )
     posts = Post.objects.filter(author__in=following_authors)
     template = "posts/follow.html"
-    paginator = Paginator(posts, settings.PER_PAGE_COUNT)
+    paginator = Paginator(posts, LENGTH)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
     context = {
