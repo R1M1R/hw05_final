@@ -139,7 +139,7 @@ class PostFormTests(TestCase):
             last_post.group.pk: form_data["group"],
             last_post.text: form_data["text"],
         }
-        self.cheking_context(expect_answer)
+        self.checking_context(expect_answer)
 
     def test_edit_post_without_group_authorized_user(self):
         """Валидная форма изменяет запись в Post."""
@@ -195,7 +195,7 @@ class PostFormTests(TestCase):
             post_new.pk: post_change.pk,
             post_new.text: post_change.text,
         }
-        self.cheking_context(expect_answer)
+        self.checking_context(expect_answer)
 
     def test_edit_post_with_group(self):
         """Валидная форма изменяет запись в Post с группой."""
@@ -225,7 +225,7 @@ class PostFormTests(TestCase):
             form_data["text"]: post_change.text,
             form_data["group"]: post_change.group.pk,
         }
-        self.cheking_context(expect_answer)
+        self.checking_context(expect_answer)
 
     def test_guest_cant_create_post(self):
         """Гость не может создавать записи."""
@@ -314,7 +314,7 @@ class PostFormTests(TestCase):
         }
         comments_count = Comment.objects.count()
         reverse_name = reverse('posts:add_comment', args=(self.post.id,))
-        response = self.client.post(
+        response = self.guest_client.post(
             reverse_name,
             data=comment_data,
             follow=True,
@@ -326,3 +326,4 @@ class PostFormTests(TestCase):
             HTTPStatus.FOUND
         )
         self.assertEqual(Comment.objects.count(), comments_count)
+        self.assertNotContains(response, "тестовый коммент")
