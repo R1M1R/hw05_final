@@ -45,7 +45,7 @@ class PostFormTests(TestCase):
         self.other_user = Client()
         self.other_user.force_login(self.user_two)
 
-    def cheking_context(self, expect_answer):
+    def checking_context(self, expect_answer):
         """Проверка контекста страниц"""
         for obj, answer in expect_answer.items():
             with self.subTest(obj=obj):
