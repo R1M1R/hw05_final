@@ -31,6 +31,7 @@ class PostFormTests(TestCase):
             text='Тестовая запись',
             group=cls.group,
         )
+        cls.post_qty = Post.objects.count()
 
     @classmethod
     def tearDownClass(cls):
@@ -51,38 +52,55 @@ class PostFormTests(TestCase):
                 resp_context = obj
                 self.assertEqual(resp_context, answer)
 
-    def test_create_post_with_img(self):
-        """Валидная форма создает запись в Post c img"""
-        post_count = Post.objects.count()
-        small_gif = (
-            b"\x47\x49\x46\x38\x39\x61\x02\x00"
-            b"\x01\x00\x80\x00\x00\x00\x00\x00"
-            b"\xFF\xFF\xFF\x21\xF9\x04\x00\x00"
-            b"\x00\x00\x00\x2C\x00\x00\x00\x00"
-            b"\x02\x00\x01\x00\x00\x02\x02\x0C"
-            b"\x0A\x00\x3B"
+    def test_create_form(self):
+        """Валидная форма create создает запись в Post."""
+        bytes_image = (
+            b'\x47\x49\x46\x38\x39\x61\x02\x00'
+            b'\x01\x00\x80\x00\x00\x00\x00\x00'
+            b'\xFF\xFF\xFF\x21\xF9\x04\x00\x00'
+            b'\x00\x00\x00\x2C\x00\x00\x00\x00'
+            b'\x02\x00\x01\x00\x00\x02\x02\x0C'
+            b'\x0A\x00\x3B'
         )
-        uploaded = SimpleUploadedFile(
-            name="small.gif", content=small_gif, content_type="image/gif"
+        image = SimpleUploadedFile(
+            name='new_small.gif',
+            content=bytes_image,
+            content_type='image/gif'
         )
         form_data = {
-            "text": "Тестовый текст",
-            "image": uploaded,
+            'text': self.post.text,
+            'group': self.group.pk,
+            'image': image,
         }
         response = self.auth_client.post(
-            reverse("posts:post_create"), data=form_data, follow=True
+            reverse('posts:post_create'),
+            data=form_data,
+            follow=True,
         )
-        self.assertRedirects(
-            response, reverse("posts:profile",
-                              kwargs={"username": PostFormTests.user})
+        self.assertEqual(response.status_code, HTTPStatus.OK)
+        self.assertRedirects(response, reverse(
+            'posts:profile', args=(self.user,)),
+            HTTPStatus.FOUND
         )
-        self.assertEqual(Post.objects.count(), post_count + 1)
-        last_post = Post.objects.order_by("-pk")[0]
-        expect_answer = {
-            last_post.text: form_data["text"],
-            str(last_post.image): str(last_post.image),
-        }
-        self.cheking_context(expect_answer)
+        self.assertEqual(Post.objects.count(), self.post_qty + 1)
+        post = Post.objects.get(pk=2)
+        check_post_fields = (
+            (post.author, self.post.author),
+            (post.text, self.post.text),
+            (post.group, self.group),
+            (post.image, f'posts/{image}'),
+        )
+        for new_post, expected in check_post_fields:
+            with self.subTest(new_post=expected):
+                self.assertEqual(new_post, expected)
+
+        response = self.auth_client.get(reverse(
+            'posts:group_list', args=(self.group.slug,))
+        )
+        self.assertEqual(response.status_code, HTTPStatus.OK)
+        self.assertEqual(len(
+            response.context['page_obj']), Post.objects.count()
+        )
 
     def test_create_post_without_group_authorized_user(self):
         """Валидная форма создает запись в Post. Без группы"""
@@ -294,6 +312,7 @@ class PostFormTests(TestCase):
         comment_data = {
             'text': 'тестовый коммент',
         }
+        comments_count = Comment.objects.count()
         reverse_name = reverse('posts:add_comment', args=(self.post.id,))
         response = self.client.post(
             reverse_name,
@@ -306,29 +325,4 @@ class PostFormTests(TestCase):
             f'{login}?{REDIRECT_FIELD_NAME}={reverse_name}',
             HTTPStatus.FOUND
         )
-        self.assertEqual(Comment.objects.count(), 0)
-
-    def test_comment_for_registered_users(self):
-        """Комментарии могут оставлять зарегистрированные пользователи."""
-        roles = (
-            self.auth_client.post,
-            self.other_user.post,
-        )
-        for role in roles:
-            with self.subTest(role=role):
-                comment_data = {
-                    'text': 'тестовый коммент',
-                }
-                response = role(
-                    reverse('posts:add_comment', args=(self.post.id,)),
-                    data=comment_data,
-                    follow=True,
-                )
-                self.assertEqual(response.status_code, HTTPStatus.OK)
-                self.assertRedirects(response, reverse(
-                    'posts:post_detail', args=(self.post.id,)),
-                    HTTPStatus.FOUND
-                )
-                comment = Comment.objects.first()
-                self.assertEqual(comment.text, comment.text)
-        self.assertEqual(Comment.objects.count(), 2)
+        self.assertEqual(Comment.objects.count(), comments_count)

@@ -22,17 +22,17 @@
           <div class="card-body">
             {% include 'includes/errors.html' %}
             <form method="post" enctype="multipart/form-data" href="{% url 'posts:post_create' %}">
-            {% csrf_token %}
-            {% include 'includes/forms.html' %}                  
-            <div class="d-flex justify-content-end">
-              <button type="submit" class="btn btn-primary">
-                {% if is_edit %}
-                  Сохранить
-                {% else %}
-                  Добавить
-                {% endif %}
-              </button>
-            </div>
+              {% csrf_token %}
+              {% include 'includes/forms.html' %}                  
+              <div class="d-flex justify-content-end">
+                <button type="submit" class="btn btn-primary">
+                  {% if is_edit %}
+                    Сохранить
+                  {% else %}
+                    Добавить
+                  {% endif %}
+                </button>
+              </div>
             </form>
           </div>
         </div>
